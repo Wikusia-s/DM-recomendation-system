@@ -1,29 +1,9 @@
 from scipy.sparse import csr_matrix
 import numpy as np
 import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 
 
-def getTwoDatasets(data):
-    """
-    Splits data into two datasets: train and test.
-    --------
-    Input:
-    data : pandas.DataFrame
-        Input DataFrame.
-    --------
-    Output:
-    pandas.DataFrame, pandas.DataFrame
-        Train and Test DataFrames.
-    """
-    assert isinstance(data, pd.DataFrame), "Input data must be a pandas DataFrame"
-
-    total_rows = len(data)
-    split_index = int(0.6 * total_rows)
-
-    train_df = pd.DataFrame(data.iloc[:split_index])
-    test_df = pd.DataFrame(data.iloc[split_index:])
-
-    return train_df, test_df
 
 def create_mappings(df):
     """
@@ -88,3 +68,59 @@ def shrinking_data(n, df):
     top_users_df = df[df['userId'].isin(top_users)].reset_index(drop=True)
 
     return top_users_df
+
+
+def movie_cluster(user_id, movie_id, no_of_nearest_neighbors, utility_matrix_train, movies):
+
+    """
+    Creates dataframe with recommended movies based on cosine similarity and calculates
+    the rating from a given movie based on recommendations for similar movies
+
+    Args:
+        user_id: id of user for which we look for recommendation
+        movie_id: id of movie for which we look for recommendation 
+        no_of_nearest_neighbors: number of clusters
+        utility_matrix_train: train matrix created in preprocessing method with movieId, userId and ratingId
+        movies: dataet with movies
+
+    Returns:
+        df: pandas dataframe with name and id of recommended movies
+        estimated_rating: rating we estimated for a given movie based on similar movies
+
+    """
+
+    cf_knn_model= NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=30, n_jobs=-1)
+    cf_knn_model.fit(utility_matrix_train)
+
+    distances, indices = cf_knn_model.kneighbors(utility_matrix_train.T.iloc[:, movie_id].values.reshape(1, -1))
+    similar_movies_indices = indices.flatten()[1:]
+    similar_movies_ids = utility_matrix_train.columns[similar_movies_indices].tolist()
+
+    cf_recs = []
+
+    for i in similar_movies_ids:
+        cf_recs.append({'Movie Id': i, 'Title':movies['title'][i]})
+
+    df = pd.DataFrame(cf_recs, index = range(1, no_of_nearest_neighbors))
+
+
+    user_ratings = utility_matrix_train.iloc[user_id, similar_movies_ids]
+
+    print("User ratings:", user_ratings)
+
+    weighted_sum = 0
+    sum_of_weights = 0
+
+    for rating, distance in zip(user_ratings, distances.flatten()[1:]):
+        if not np.isnan(rating) and rating != 0:
+            
+            weight = 1/(distance + 1e-10)
+            weighted_sum += weight * rating
+            sum_of_weights += weight
+    
+    if sum_of_weights != 0:
+        estimated_rating = weighted_sum/sum_of_weights
+    else:
+        estimated_rating = 0
+
+    return df, round(estimated_rating, 2)
