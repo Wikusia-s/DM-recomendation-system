@@ -89,7 +89,7 @@ def movie_cluster(user_id, movie_id, no_of_nearest_neighbors, utility_matrix_tra
 
     """
 
-    cf_knn_model= NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=30, n_jobs=-1)
+    cf_knn_model= NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=no_of_nearest_neighbors, n_jobs=-1)
     cf_knn_model.fit(utility_matrix_train)
 
     distances, indices = cf_knn_model.kneighbors(utility_matrix_train.T.iloc[:, movie_id].values.reshape(1, -1))
