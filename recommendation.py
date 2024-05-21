@@ -2,7 +2,9 @@ from scipy.sparse import csr_matrix
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
-
+from sklearn.model_selection import KFold
+from sklearn.metrics import mean_squared_error
+from sklearn.cluster import KMeans
 
 
 def create_mappings(df):
@@ -45,21 +47,6 @@ def create_utility_matrix(df):
 
     return utility_matrix
 
-def create_chronological_mapping(df):
-    """
-    Creates movie mapping to make it chronological
-
-    Args:
-        df: pandas dataframe
-
-    Returns:
-        df: pandas dataframe but chronological
-    """
-    mapping_dict = {}
-    for index, value in enumerate(df['movieId'].unique()):
-        mapping_dict[value] = index
-
-    df['movieIndex'] = df['movieId'].map(mapping_dict)
 
 def shrinking_data(n, df):
     user_likes = df.groupby('userId')['movieId'].count()
@@ -70,57 +57,31 @@ def shrinking_data(n, df):
     return top_users_df
 
 
-def movie_cluster(user_id, movie_id, no_of_nearest_neighbors, utility_matrix_train, movies):
+def return_datasets(data, kf):
 
     """
-    Creates dataframe with recommended movies based on cosine similarity and calculates
-    the rating from a given movie based on recommendations for similar movies
+    Combines datsets after KFold method
 
     Args:
-        user_id: id of user for which we look for recommendation
-        movie_id: id of movie for which we look for recommendation 
-        no_of_nearest_neighbors: number of clusters
-        utility_matrix_train: train matrix created in preprocessing method with movieId, userId and ratingId
-        movies: dataet with movies
+        data: pandas dataframe which is splitted
+        kf: kfold
 
     Returns:
-        df: pandas dataframe with name and id of recommended movies
-        estimated_rating: rating we estimated for a given movie based on similar movies
-
+        combined_train_data: all train subsets combined together
+        combined_test_data: all test subsets combined together
     """
 
-    cf_knn_model= NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=no_of_nearest_neighbors, n_jobs=-1)
-    cf_knn_model.fit(utility_matrix_train)
-
-    distances, indices = cf_knn_model.kneighbors(utility_matrix_train.T.iloc[:, movie_id].values.reshape(1, -1))
-    similar_movies_indices = indices.flatten()[1:]
-    similar_movies_ids = utility_matrix_train.columns[similar_movies_indices].tolist()
-
-    cf_recs = []
-
-    for i in similar_movies_ids:
-        cf_recs.append({'Movie Id': i, 'Title':movies['title'][i]})
-
-    df = pd.DataFrame(cf_recs, index = range(1, no_of_nearest_neighbors))
-
-
-    user_ratings = utility_matrix_train.iloc[user_id, similar_movies_ids]
-
-    print("User ratings:", user_ratings)
-
-    weighted_sum = 0
-    sum_of_weights = 0
-
-    for rating, distance in zip(user_ratings, distances.flatten()[1:]):
-        if not np.isnan(rating) and rating != 0:
-            
-            weight = 1/(distance + 1e-10)
-            weighted_sum += weight * rating
-            sum_of_weights += weight
+    data = data.copy()
+    all_train_data = []
+    all_test_data = []
     
-    if sum_of_weights != 0:
-        estimated_rating = weighted_sum/sum_of_weights
-    else:
-        estimated_rating = 0
+    for train_index, test_index in kf.split(data):
+    
+        train_data_kf = data.iloc[train_index].copy()
+        test_data_kf = data.iloc[test_index].copy()
 
-    return df, round(estimated_rating, 2)
+        all_train_data.append(train_data_kf)
+        all_test_data.append(test_data_kf)
+
+
+    return all_train_data, all_test_data
