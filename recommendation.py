@@ -87,3 +87,77 @@ def return_datasets(data, kf):
     return all_train_data, all_test_data
 
 
+def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
+    """
+    Trains KMeans model and predicts ratings for the test data
+
+    Args:
+        train_df: list of train subsets for each KFold split
+        test_df: list of test subsets for each KFold split
+        n_clusters: number of clusters for KMeans
+
+    Returns:
+        mse_list: list of mean squared errors for each KFold split
+        models: list of trained KMeans models
+        train_dfs: list of train dataframes with clusters assigned
+    """
+    mse_list = []
+    models = []
+    train_dfs = []
+
+    for i in range(len(train_df)):
+        train_data = train_df[i]
+        test_data = test_df[i]
+
+        X_train = train_data.drop(columns=['userId', 'movieId', 'rating', 'title'])
+        X_test = test_data.drop(columns=['userId', 'movieId', 'rating', 'title'])
+        y_test = test_data['rating']
+
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        kmeans.fit(X_train)
+
+        train_data['cluster'] = kmeans.labels_
+        
+        if 'predicted_rating' in test_data.columns:
+            test_data = test_data.drop(columns=['predicted_rating'])
+        
+        test_data['cluster'] = kmeans.predict(X_test)
+
+        cluster_mean_ratings = train_data.groupby('cluster')['rating'].mean()
+        test_data['predicted_rating'] = test_data['cluster'].map(cluster_mean_ratings)
+
+        mse = mean_squared_error(y_test, test_data['predicted_rating'])
+        mse_list.append(mse)
+
+        models.append(kmeans)
+        train_dfs.append(train_data)
+
+    return mse_list, models, train_dfs
+
+def predict_rating(user_id, movie_id, models, train_dfs, movie_data):
+    """
+    Predicts the rating for a given user and movie
+
+    Args:
+        user_id: ID of the user
+        movie_id: ID of the movie
+        models: list of trained KMeans models
+        train_dfs: list of train dataframes with clusters assigned
+        movie_data: original movie data to find movie features
+
+    Returns:
+        predicted_rating: predicted rating for the given user and movie
+    """
+    # Find the movie features
+    movie_features = movie_data[movie_data['movieId'] == movie_id].drop(columns=['userId', 'movieId', 'rating', 'title'])
+    if movie_features.empty:
+        return None  # Movie not found
+
+    # Predict cluster for the movie using the first model (for simplicity)
+    predicted_cluster = models[0].predict(movie_features)
+
+    # Find the mean rating for the predicted cluster in the train data
+    cluster_mean_ratings = train_dfs[0].groupby('cluster')['rating'].mean()
+    predicted_rating = cluster_mean_ratings.get(predicted_cluster[0], None)
+
+    return predicted_rating
