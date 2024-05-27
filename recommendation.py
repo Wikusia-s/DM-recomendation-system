@@ -5,6 +5,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error
 from sklearn.cluster import KMeans
+from mlxtend.frequent_patterns import apriori, association_rules
 
 
 def create_mappings(df):
@@ -134,7 +135,7 @@ def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
 
     return mse_list, models, train_dfs
 
-def predict_rating(user_id, movie_id, models, train_dfs, movie_data):
+def predict_rating_kmeans(user_id, movie_id, models, train_dfs, movie_data):
     """
     Predicts the rating for a given user and movie
 
@@ -161,3 +162,55 @@ def predict_rating(user_id, movie_id, models, train_dfs, movie_data):
     predicted_rating = cluster_mean_ratings.get(predicted_cluster[0], None)
 
     return predicted_rating
+
+
+def getFrequentItemset(clustered_data, min_support=0.01):
+    """
+    Finds frequent itemsets from the clustered data
+
+    Args:
+        clustered_data: list of train dataframes with clusters assigned
+        min_support: minimum support for the frequent itemsets
+
+    Returns:
+        frequent_itemsets: list of frequent itemsets found for each train dataframe for each cluster
+    """
+    frequent_itemsets = []
+
+    for dataset in clustered_data:
+        curr_freq_itemset = []
+        train_df = dataset.drop(columns=['userId', 'movieId', 'rating', 'title'])
+
+        for cluster in train_df['cluster'].unique():
+            freq = apriori(train_df[train_df['cluster']==cluster].drop(columns=['cluster']), min_support, use_colnames=True)
+            curr_freq_itemset.append(freq)
+
+        frequent_itemsets.append(curr_freq_itemset)
+    
+    return frequent_itemsets
+
+
+def getRules(freq_itemsets, metric='confidence', min_threshold=0.8):
+    """
+    Generates association rules from the frequent itemsets
+
+    Args:
+        freq_itemsets: list of frequent itemsets for each cluster
+        metric: metric used to assess the quality of association rules
+        min_threshold: minimum threshold which the metric has to fulfill
+
+    Returns:
+        rules: list of association rules for each cluster in each group of freq_itemsets
+    """
+
+    rules = []
+    for set in freq_itemsets:
+        curr_rules = []
+        for cluster in set:
+            assoc_rules = association_rules(cluster, metric, min_threshold)
+            curr_rules.append(assoc_rules)
+
+        rules.append(curr_rules)
+    
+    return rules
+    
