@@ -6,50 +6,18 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error
 from sklearn.cluster import KMeans
 from mlxtend.frequent_patterns import apriori, association_rules
+from typing import List, Tuple, Dict
 
 
-def create_mappings(df):
-    """
-    Maps user to movie and movie to user
 
-    Args:
-        df: pandas dataframe
-
-    Returns:
-        user2movie: dictionary that maps user to movie
-        movie2user: dictionary that maps movie to user
-
-    """
+def shrinking_data(n: int, df: pd.DataFrame) -> pd.DataFrame:
 
 
-    user2movie = df.groupby('userId')['movieId'].unique().to_dict()
-    movie2user = df.groupby('movieId')['userId'].unique().to_dict()
+    assert isinstance(n, int), "n should be an integer"
+    assert isinstance(df, pd.DataFrame), "df should be a DataFrame"
+    assert 'userId' in df.columns, "userId column is missing"
+    assert 'movieId' in df.columns, "movieId column is missing"
 
-    return user2movie, movie2user
-
-
-def create_utility_matrix(df):
-    """
-    Creates a pivot table from the original DataFrame. This results
-    in a new DataFrame where users and movies are organized along rows
-    and columns
-
-    Args:
-        df: pandas dataframe
-
-    Returns:
-        utility_matrix: utility matrix with information about movie ratings
-
-    """
-    utility_matrix = df.pivot_table(index='userId', columns='movieId', values='rating')
-    
-    # Fill NaN values with 0
-    utility_matrix.fillna(0, inplace=True) 
-
-    return utility_matrix
-
-
-def shrinking_data(n, df):
     user_likes = df.groupby('userId')['movieId'].count()
     top_users = user_likes.nlargest(n).index
 
@@ -58,7 +26,7 @@ def shrinking_data(n, df):
     return top_users_df
 
 
-def return_datasets(data, kf):
+def return_datasets(data: pd.DataFrame, kf):
 
     """
     Combines datsets after KFold method
@@ -71,6 +39,9 @@ def return_datasets(data, kf):
         combined_train_data: all train subsets combined together
         combined_test_data: all test subsets combined together
     """
+
+    ### TESTS
+    assert isinstance(data, pd.DataFrame), "data should be a DataFrame"
 
     data = data.copy()
     all_train_data = []
@@ -102,6 +73,11 @@ def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
         models: list of trained KMeans models
         train_dfs: list of train dataframes with clusters assigned
     """
+    ### TESTS
+    assert isinstance(train_df, list), "train_df should be a list"
+    assert isinstance(test_df, list), "test_df should be a list"
+    assert isinstance(n_clusters, int), "n_clusters should be an integer"
+
     mse_list = []
     models = []
     train_dfs = []
@@ -109,6 +85,14 @@ def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
     for i in range(len(train_df)):
         train_data = train_df[i]
         test_data = test_df[i]
+
+        ### TESTS
+        assert isinstance(train_data, pd.DataFrame), "each element in train_df should be a DataFrame"
+        assert isinstance(test_data, pd.DataFrame), "each element in test_df should be a DataFrame"
+        assert 'userId' in train_data.columns, "userId column is missing in train_df"
+        assert 'movieId' in train_data.columns, "movieId column is missing in train_df"
+        assert 'rating' in train_data.columns, "rating column is missing in train_df"
+        assert 'title' in train_data.columns, "title column is missing in train_df"
 
         X_train = train_data.drop(columns=['userId', 'movieId', 'rating', 'title'])
         X_test = test_data.drop(columns=['userId', 'movieId', 'rating', 'title'])
@@ -135,7 +119,7 @@ def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
 
     return mse_list, models, train_dfs
 
-def predict_rating_kmeans(user_id, movie_id, models, train_dfs, movie_data):
+def predict_rating_kmeans(user_id:int, movie_id:int, models, train_dfs, movie_data):
     """
     Predicts the rating for a given user and movie
 
@@ -149,6 +133,17 @@ def predict_rating_kmeans(user_id, movie_id, models, train_dfs, movie_data):
     Returns:
         predicted_rating: predicted rating for the given user and movie
     """
+    ### TESTS
+    assert isinstance(user_id, int), "user_id should be an integer"
+    assert isinstance(movie_id, int), "movie_id should be an integer"
+    assert isinstance(models, list), "models should be a list"
+    assert isinstance(train_dfs, list), "train_dfs should be a list"
+    assert isinstance(movie_data, pd.DataFrame), "movie_data should be a DataFrame"
+    assert 'userId' in movie_data.columns, "userId column is missing in movie_data"
+    assert 'movieId' in movie_data.columns, "movieId column is missing in movie_data"
+    assert 'rating' in movie_data.columns, "rating column is missing in movie_data"
+    assert 'title' in movie_data.columns, "title column is missing in movie_data"
+    
     # Find the movie features
     movie_features = movie_data[movie_data['movieId'] == movie_id].drop(columns=['userId', 'movieId', 'rating', 'title'])
     if movie_features.empty:
@@ -162,7 +157,6 @@ def predict_rating_kmeans(user_id, movie_id, models, train_dfs, movie_data):
     predicted_rating = cluster_mean_ratings.get(predicted_cluster[0], None)
 
     return predicted_rating, predicted_cluster, cluster_mean_ratings
-
 
 def getFrequentItemset(clustered_data: list, min_support: float=0.02) -> list:
     """
