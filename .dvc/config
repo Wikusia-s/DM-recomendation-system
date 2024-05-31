@@ -1,4 +1,0 @@
-[core]
-    remote = dvc-remote
-['remote "dvc-remote"']
-    url = https://github.com/Wikusia-s/DM-recomendation-system.git
