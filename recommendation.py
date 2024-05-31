@@ -1,12 +1,7 @@
-from scipy.sparse import csr_matrix
-import numpy as np
 import pandas as pd
-from sklearn.neighbors import NearestNeighbors
-from sklearn.model_selection import KFold
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 from sklearn.cluster import KMeans
 from mlxtend.frequent_patterns import apriori, association_rules
-from typing import List, Tuple, Dict
 
 
 
@@ -26,7 +21,7 @@ def shrinking_data(n: int, df: pd.DataFrame) -> pd.DataFrame:
     return top_users_df
 
 
-def return_datasets(data: pd.DataFrame, kf):
+def return_datasets(data: pd.DataFrame, kf: int) -> tuple:
 
     """
     Combines datsets after KFold method
@@ -44,47 +39,52 @@ def return_datasets(data: pd.DataFrame, kf):
     assert isinstance(data, pd.DataFrame), "data should be a DataFrame"
 
     data = data.copy()
-    all_train_data = []
-    all_test_data = []
-    
+    all_train_data = {}
+    all_test_data = {}
+    index = 0
+
     for train_index, test_index in kf.split(data):
     
         train_data_kf = data.iloc[train_index].copy()
         test_data_kf = data.iloc[test_index].copy()
 
-        all_train_data.append(train_data_kf)
-        all_test_data.append(test_data_kf)
+        all_train_data[index] = train_data_kf
+        all_test_data[index] = test_data_kf
+        index += 1
 
 
     return all_train_data, all_test_data
 
 
-def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
+def train_kmeans_and_predict(train_df: dict, test_df: dict, n_clusters=5) -> tuple:
     """
     Trains KMeans model and predicts ratings for the test data
 
     Args:
-        train_df: list of train subsets for each KFold split
-        test_df: list of test subsets for each KFold split
+        train_df: dictonary of train subsets for each KFold split
+        test_df: dictonary of test subsets for each KFold split
         n_clusters: number of clusters for KMeans
 
     Returns:
         mse_list: list of mean squared errors for each KFold split
         models: list of trained KMeans models
-        train_dfs: list of train dataframes with clusters assigned
+        train_dfs: dictonary of train dataframes with clusters assigned
+        test_dfs: dictonary of test dataframes with predicted ratings
     """
     ### TESTS
-    assert isinstance(train_df, list), "train_df should be a list"
-    assert isinstance(test_df, list), "test_df should be a list"
+    assert isinstance(train_df, dict), "train_df should be a dictonary"
+    assert isinstance(test_df, dict), "test_df should be a dictonary"
     assert isinstance(n_clusters, int), "n_clusters should be an integer"
 
     mse_list = []
     models = []
-    train_dfs = []
+    train_dfs = {}
+    test_dfs = {}
+    index = 0
 
-    for i in range(len(train_df)):
-        train_data = train_df[i]
-        test_data = test_df[i]
+    for key in train_df:
+        train_data = train_df[key]
+        test_data = test_df[key]
 
         ### TESTS
         assert isinstance(train_data, pd.DataFrame), "each element in train_df should be a DataFrame"
@@ -111,15 +111,17 @@ def train_kmeans_and_predict(train_df, test_df, n_clusters=5):
         cluster_mean_ratings = train_data.groupby('cluster')['rating'].mean()
         test_data['predicted_rating'] = test_data['cluster'].map(cluster_mean_ratings)
 
-        mse = mean_squared_error(y_test, test_data['predicted_rating'])
+        mse = mean_absolute_error(y_test, test_data['predicted_rating'])
         mse_list.append(mse)
 
         models.append(kmeans)
-        train_dfs.append(train_data)
+        train_dfs[index] = train_data
+        test_dfs[index] = test_data
+        index += 1
 
-    return mse_list, models, train_dfs
+    return mse_list, models, train_dfs, test_dfs
 
-def predict_rating_kmeans(user_id:int, movie_id:int, models, train_dfs, movie_data):
+def predict_rating_kmeans(user_id:int, movie_id:int, models, train_dfs: dict, movie_data: pd.DataFrame):
     """
     Predicts the rating for a given user and movie
 
@@ -127,7 +129,7 @@ def predict_rating_kmeans(user_id:int, movie_id:int, models, train_dfs, movie_da
         user_id: ID of the user
         movie_id: ID of the movie
         models: list of trained KMeans models
-        train_dfs: list of train dataframes with clusters assigned
+        train_dfs: dictonary of train dataframes with clusters assigned
         movie_data: original movie data to find movie features
 
     Returns:
@@ -137,7 +139,7 @@ def predict_rating_kmeans(user_id:int, movie_id:int, models, train_dfs, movie_da
     assert isinstance(user_id, int), "user_id should be an integer"
     assert isinstance(movie_id, int), "movie_id should be an integer"
     assert isinstance(models, list), "models should be a list"
-    assert isinstance(train_dfs, list), "train_dfs should be a list"
+    assert isinstance(train_dfs, dict), "train_dfs should be a dictonary"
     assert isinstance(movie_data, pd.DataFrame), "movie_data should be a DataFrame"
     assert 'userId' in movie_data.columns, "userId column is missing in movie_data"
     assert 'movieId' in movie_data.columns, "movieId column is missing in movie_data"
@@ -158,29 +160,32 @@ def predict_rating_kmeans(user_id:int, movie_id:int, models, train_dfs, movie_da
 
     return predicted_rating, predicted_cluster, cluster_mean_ratings
 
-def getFrequentItemset(clustered_data: list, min_support: float=0.02) -> list:
+def getFrequentItemset(clustered_data: dict, min_support: float=0.1) -> dict:
     """
     Finds frequent itemsets from the clustered data
 
     ------------
     Args:
-        clustered_data: list of train dataframes with clusters assigned
+        clustered_data: dictonary of train dataframes with clusters assigned
         min_support: minimum support for the frequent itemsets
 
     ------------
     Returns:
-        frequent_itemsets: list of frequent itemsets found for each train dataframe for each cluster
+        frequent_itemsets: dictonary of frequent itemsets found for each train dataframe for each cluster
     """
 
     ### TESTS
-    assert isinstance(clustered_data, list), "clustered_data should be a list"
+    assert isinstance(clustered_data, dict), "clustered_data should be a dictonary"
     assert isinstance(min_support, float), "min_support should be a float"
     assert min_support > 0 and min_support < 1, "min_support should be between 0 and 1"
 
-    frequent_itemsets = []
+    frequent_itemsets = {}
+    index = 0
 
-    for dataset in clustered_data:
+    for key in clustered_data:
 
+        dataset = clustered_data[key]
+        
         ### TESTS
         assert isinstance(dataset, pd.DataFrame), "each element in clustered_data should be a DataFrame"
         assert 'cluster' in dataset.columns, "cluster column is missing"
@@ -192,36 +197,40 @@ def getFrequentItemset(clustered_data: list, min_support: float=0.02) -> list:
             freq = apriori(train_df[train_df['cluster']==cluster].drop(columns=['cluster']), min_support, use_colnames=True)
             curr_freq_itemset.append(freq)
 
-        frequent_itemsets.append(curr_freq_itemset)
+        frequent_itemsets[index] = curr_freq_itemset
+        index += 1
     
     return frequent_itemsets
 
 
-def getRules(freq_itemsets: list, metric: str='confidence', min_threshold: float=0.8) -> list:
+def getRules(freq_itemsets: dict, metric: str='confidence', min_threshold: float=0.8) -> dict:
     """
     Generates association rules from the frequent itemsets
 
     ------------
     Args:
-        freq_itemsets: list of frequent itemsets for each cluster
+        freq_itemsets: dictonary of frequent itemsets for each cluster
         metric: metric used to assess the quality of association rules
         min_threshold: minimum threshold which the metric has to fulfill
 
     ------------
     Returns:
-        rules: list of association rules for each cluster in each group of freq_itemsets
+        rules: dictonary of association rules for each cluster in each group of freq_itemsets
     """
 
     ### TESTS
-    assert isinstance(freq_itemsets, list), "freq_itemsets should be a list"
+    assert isinstance(freq_itemsets, dict), "freq_itemsets should be a dictonary"
     assert isinstance(metric, str), "metric should be a string"
     assert metric in ['confidence', 'lift', 'leverage', 'conviction'], "metric should be one of 'confidence', 'lift', 'leverage', 'conviction"
     assert isinstance(min_threshold, float), "min_threshold should be a float"
     assert min_threshold > 0 and min_threshold < 1, "min_threshold should be between 0 and 1"
 
-    rules = []
-    for set in freq_itemsets:
+    rules = {}
+    index = 0
 
+    for key in freq_itemsets:
+
+        set = freq_itemsets[key]
         ### TESTS
         assert isinstance(set, list), "each element in freq_itemsets[] should be a list"
 
@@ -234,11 +243,12 @@ def getRules(freq_itemsets: list, metric: str='confidence', min_threshold: float
             assoc_rules = association_rules(cluster, metric, min_threshold)
             curr_rules.append(assoc_rules)
 
-        rules.append(curr_rules)
+        rules[index] = curr_rules
+        index += 1
     
     return rules
 
-def filterRules(userId: int, movieId: int, df: pd.DataFrame, cluster: int, cluster_mean_ratings: pd.Series, rules: list) -> list:
+def filterRules(userId: int, movieId: int, df: pd.DataFrame, cluster: int, cluster_mean_ratings: pd.Series, rules: dict) -> dict:
     """
     Filters rules to contain only rules important for a given user and movie based on the rules generated by the Apriori algorithm.
 
@@ -254,9 +264,9 @@ def filterRules(userId: int, movieId: int, df: pd.DataFrame, cluster: int, clust
     ------------
     Returns:
         important_rules: Filtered rules or 
-                1) ['rated', rating, mess] if the user has already rated the movie
-                2) ['no rated', cluster_mean_ratings[cluster], mess] if the user has not rated any movies yet
-                3) ['no rules', cluster_mean_ratings[cluster], mess] if there are no rules for the movie
+                1) 'rated', rating, mess if the user has already rated the movie
+                2) 'no rated', cluster_mean_ratings[cluster], mess if the user has not rated any movies yet
+                3) 'no rules', cluster_mean_ratings[cluster], mess if there are no rules for the movie
 
     """
 
@@ -269,19 +279,21 @@ def filterRules(userId: int, movieId: int, df: pd.DataFrame, cluster: int, clust
     assert 'rating' in df.columns, "rating column is missing"
     assert isinstance(cluster, int), "cluster should be an integer"
     assert isinstance(cluster_mean_ratings, pd.Series), "cluster_mean_ratings should be a pandas Series"
-    assert isinstance(rules, list), "rules should be a list"
+    assert isinstance(rules, dict), "rules should be a dictonary"
 
 
     user_movies = df[df['userId'] == userId]
-
+    
     if movieId in user_movies['movieId'].values:
-        mess = f"User {userId} has already rated movie {movieId}"
         rating = user_movies[user_movies['movieId'] == movieId]['rating'].values[0]
-        return ['rated', rating, mess]
+        mess = f"User {userId} has already rated movie {movieId}"
+        return {'code': 'rated', 'rating': rating, 'mess': mess}
     
     elif user_movies.empty:
             mess = f"User {userId} has not rated any movies yet"
-            return ['no rated', cluster_mean_ratings[cluster], mess]
+            return {'code': 'no rated', 
+                'rating': cluster_mean_ratings[cluster], 
+                'mess': mess}
     
     else:
         user_movies = user_movies.drop(columns = ['userId', 'movieId', 'title'])
@@ -290,31 +302,40 @@ def filterRules(userId: int, movieId: int, df: pd.DataFrame, cluster: int, clust
         
     movie_genres = df[df['movieId'] == movieId].drop(columns=['userId', 'movieId', 'rating', 'title']).where(lambda x: x == 1).dropna(axis=1).columns
     
-    important_rules = []
+    important_rules = {}
+    index = 0
 
-    #from cluster and model 0 (simplicity)
-    for rule in rules[0][cluster].iterrows():
+    for key in rules:
+        curr_import_rules = []
 
-        ### TESTS
-        assert isinstance(rule[1], pd.Series), "each element in rules[] should be a pandas Series"
-        assert 'consequents' in rule[1].index, "consequents column is missing"
+        for rule in rules[key][cluster].iterrows():
 
-        if rule[1]['consequents'].issubset(movie_genres):
-            for movie in user_movies.iterrows():
+            ### TESTS
+            assert isinstance(rule[1], pd.Series), "each element in rules[] should be a pandas Series"
+            assert 'consequents' in rule[1].index, "consequents column is missing"
 
-                ### TESTS
-                assert 'antecedents' in rule[1].index, "antecedents column is missing"
+            if rule[1]['consequents'].issubset(movie_genres):
+                for movie in user_movies.iterrows():
 
-                if rule[1]['antecedents'].issubset(movie[1][1]):
-                    important_rules.append((rule[1], movie[1][0]))
+                    ### TESTS
+                    assert 'antecedents' in rule[1].index, "antecedents column is missing"
+
+                    if rule[1]['antecedents'].issubset(movie[1][1]):
+                        curr_import_rules.append((rule[1], movie[1][0]))
+
+        if curr_import_rules:
+            important_rules[index] = curr_import_rules
+            index += 1
 
     if not important_rules:
         mess = f"No rules found for movie {movieId}"
-        return ['no rules', cluster_mean_ratings[cluster], mess]
+        return {'code': 'no rules', 
+                'rating': cluster_mean_ratings[cluster], 
+                'mess': mess}
     
     return important_rules
 
-def predictRatingRules(important_rules:list) -> float:
+def predictRatingRules(important_rules: dict) -> float:
     """
     Predicts the rating for a movie based on the rules generated by the Apriori algorithm.
 
@@ -329,34 +350,95 @@ def predictRatingRules(important_rules:list) -> float:
     """
 
     ### TESTS
-    assert isinstance(important_rules, list), "important_rules should be a list"
+    assert isinstance(important_rules, dict), "important_rules should be a dictonary"
 
-    if important_rules[0] in ['rated', 'no rated', 'no rules']:
+    if 'code' in important_rules.keys():
 
         ### TESTS
-        assert isinstance(important_rules[1], float), "second element in important_rules should be a float if the first element is 'rated', 'no rated' or 'no rules'"
-        print(important_rules[2])
-        return important_rules[1]
+        assert isinstance(important_rules['rating'], float), "second element in important_rules should be a float if the first element is 'rated', 'no rated' or 'no rules'"
+        # print(important_rules['mess'])
+        return important_rules['rating']
     
     predicted_rating = 0
-    sum_confidence = 0
+    models = 0
 
-    for rule in important_rules:
+    model_rating = 0
+    model_confidence = 0
 
-        ### TESTS
-        assert isinstance(rule, tuple), "each element in important_rules should be a tuple"
-        assert isinstance(rule[0], pd.Series), "first element in the tuple should be a pandas Series"
-        assert 'confidence' in rule[0].index, "confidence column is missing"
-        assert isinstance(rule[1], float), "second element in the tuple should be a float"
+    for key in important_rules:
+        for rule in important_rules[key]:
 
-        predicted_rating += rule[0]['confidence'] * rule[1]
-        sum_confidence += rule[0]['confidence']
+            ### TESTS
+            assert isinstance(rule, tuple), "each element in important_rules should be a tuple"
+            assert isinstance(rule[0], pd.Series), "first element in the tuple should be a pandas Series"
+            assert 'confidence' in rule[0].index, "confidence column is missing"
+            assert isinstance(rule[1], float), "second element in the tuple should be a float"
 
-    if sum_confidence == 0:
+            
+            model_rating += rule[0]['confidence'] * rule[1]
+            model_confidence += rule[0]['confidence']
+
+        if model_confidence != 0:
+            predicted_rating += model_rating/model_confidence
+            models += 1
+
+    if models == 0:
         return 0
-
-    rating = round(predicted_rating/sum_confidence, 2)
+    
+    rating = round(predicted_rating/models, 2)
     return rating
+
+def getErrorRules(testdf: dict, rules: dict, cluster_mean_ratings: pd.Series) -> float:
+    """
+    Calculates the mean absolute error for the rules-based recommendation system
+
+    ------------
+    Args:
+        testdf: dict of DataFrames containing the test data
+        rules: Rules generated by the Apriori algorithm
+        cluster_mean_ratings: Mean ratings for each cluster
+
+    ------------
+    Returns:
+        error: Mean absolute error for the rules-based recommendation system for each model
+    """
+
+    ### TESTS
+    assert isinstance(testdf, dict), "testdf should be a dictonary"
+    assert isinstance(rules, dict), "rules should be a dictonary"
+    assert isinstance(cluster_mean_ratings, pd.Series), "cluster_mean_ratings should be a pandas Series"
+
+    error = 0
+
+    schuffle = testdf[0].sample(frac=1)
+    test_data = schuffle[:3000]
+
+    error_curr = 0
+    
+    ### TESTS
+    assert isinstance(test_data, pd.DataFrame), "each element in testdf should be a DataFrame"
+    assert 'userId' in test_data.columns, "userId column is missing"
+    assert 'movieId' in test_data.columns, "movieId column is missing"
+    assert 'rating' in test_data.columns, "rating column is missing"
+    assert 'cluster' in test_data.columns, "cluster column is missing"
+
+    for index, row in test_data.iterrows():
+        
+        user_id = row['userId']
+        movie_id = row['movieId']
+        rating = row['rating']
+        cluster = row['cluster']
+        #remove the current row from the dataset
+        filtered_rules = filterRules(user_id, movie_id, test_data.drop(index), cluster, cluster_mean_ratings, rules)
+        predicted_rating = predictRatingRules(filtered_rules)
+
+        
+        error_curr += abs(rating - predicted_rating)
+    
+    error += error_curr/len(test_data)
+
+    return error/len(testdf)
+
 
 def roundRating(rating: float) -> float:
     """
