@@ -29,5 +29,5 @@ Inside the code folder, you can find the following files:
 
 ### How to use the code
 
-Whole project is created in jupyter notebook which uses functions written in python in recommendation.py file. We load our data in the first place ysing pandas library. This is crucial to continue the creation of recommendation system. To provide the same experiment: download the code folder.
+Whole project is created in jupyter notebook which uses functions written in python in recommendation.py file. We load our data in the first place ysing pandas library. This is crucial to continue the creation of recommendation system. To provide the same experiment: download the files mentioned in the repository and also dataset from [here](https://grouplens.org/datasets/movielens/).
 
