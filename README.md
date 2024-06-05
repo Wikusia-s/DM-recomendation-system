@@ -25,9 +25,9 @@ Inside the code folder, you can find the following files:
 - ***recommendation.py*** - the main file with the used functions
 - ***main.ipynb*** - reproducible set of samples presented in Jupyter Notebook
 - ***testing.ipynb*** - set of tests of the recommendation.py file
-- TO DO data
+- ***ratings.csv*** and ***movies.csv*** datasets used in the assignmnet
 
-### Links to good stuff:
-1. [kaggle](https://www.kaggle.com/code/ahm6644/movies-recommendations-by-association-rules)
-2. [kaggle notebook](https://www.kaggle.com/code/shiblinomani/recommender-system-using-movielens-20m-dataset/notebook)
-3. [github tutorial](https://github.com/topspinj/tmls-2020-recommender-workshop/blob/master/tutorial.ipynb)
+### How to use the code
+
+Whole project is created in jupyter notebook which uses functions written in python in recommendation.py file. We load our data in the first place ysing pandas library. This is crucial to continue the creation of recommendation system. To provide the same experiment: download the code folder.
+
